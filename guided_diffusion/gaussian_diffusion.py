@@ -332,7 +332,7 @@ class GaussianDiffusion:
         Sample x_{t-1} from the model at the given timestep.
 
         :param model: the model to sample from.
-        :param x: the current tensor at x_{t-1}.
+        :param x: the current tensor at x_{t-1} (last call to p_sample - x_t for our implementation)
         :param t: the value of t, starting at 0 for the first diffusion step.
         :param clip_denoised: if True, clip the x_start prediction to [-1, 1].
         :param denoised_fn: if not None, a function which applies to the
@@ -347,6 +347,8 @@ class GaussianDiffusion:
         """
         noise = th.randn_like(x)
 
+        # Summary: This is the setting up of the clever arguments (8a. 8b, 8c) 
+        # that are passed into p (the denoising step).
         if conf.inpa_inj_sched_prev:
 
             if pred_xstart is not None:
@@ -356,9 +358,13 @@ class GaussianDiffusion:
 
                 gt = model_kwargs['gt']
 
+                # Setting up params for eq. 8a in the paper
+                # Note: need the cumulitive prod in order to auto generate the t'th noised ground truth
+                # Note: this computes the t'th noised ground truth on-demand.
                 alpha_cumprod = _extract_into_tensor(
                     self.alphas_cumprod, t, x.shape)
-
+                
+                # TODO: repeat this process for the t'th noised target image.
                 if conf.inpa_inj_sched_prev_cumnoise:
                     weighed_gt = self.get_gt_noised(gt, int(t[0].item()))
                 else:
@@ -368,19 +374,22 @@ class GaussianDiffusion:
                     noise_weight = th.sqrt((1 - alpha_cumprod))
                     noise_part = noise_weight * th.randn_like(x)
 
+                    # weighed_gt is output of eq. 8a
                     weighed_gt = gt_part + noise_part
-
+                                    
+                # updates x to be x_{t-1} - eq. 8c
                 x = (
                     gt_keep_mask * (
                         weighed_gt
                     )
                     +
                     (1 - gt_keep_mask) * (
+                        # TODO: where the lambda convex combo goes for our implementation
                         x
                     )
                 )
 
-
+        # eq. 2 (p) - the denoising step
         out = self.p_mean_variance(
             model,
             x,
@@ -484,6 +493,7 @@ class GaussianDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
+        # image_after_step = x_T
         if noise is not None:
             image_after_step = noise
         else:
