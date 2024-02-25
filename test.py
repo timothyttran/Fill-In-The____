@@ -61,7 +61,7 @@ def main(conf: conf_mgt.Default_Conf):
     print("Start", conf['name'])
 
     device = dist_util.dev(conf.get('device'))
-
+    # device = dist_util.dev("cuda" if th.cuda.is_available() else "cpu")
 
     model, diffusion = create_model_and_diffusion(
         **select_args(conf, model_and_diffusion_defaults().keys()), conf=conf
@@ -129,6 +129,8 @@ def main(conf: conf_mgt.Default_Conf):
         if gt_keep_mask is not None:
             model_kwargs['gt_keep_mask'] = gt_keep_mask
 
+        model_kwargs['target_image'] = batch['target_image']
+            
         batch_size = model_kwargs["gt"].shape[0]
 
         if conf.cond_y is not None:

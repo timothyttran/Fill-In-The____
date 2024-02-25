@@ -358,6 +358,10 @@ class GaussianDiffusion:
 
                 gt = model_kwargs['gt']
 
+                target = model_kwargs['target_image']
+                assert target is not None, 'WARNING: target is None'
+                # TODO: use target to find 8a, 8b, 8c equations then do linear combo
+
                 # Setting up params for eq. 8a in the paper
                 # Note: need the cumulitive prod in order to auto generate the t'th noised ground truth
                 # Note: this computes the t'th noised ground truth on-demand.

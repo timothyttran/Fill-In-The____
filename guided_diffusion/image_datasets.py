@@ -30,6 +30,7 @@ def load_data_inpa(
     *,
     gt_path=None,
     mask_path=None,
+    target_image_path=None,
     batch_size,
     image_size,
     class_cond=False,
@@ -65,9 +66,11 @@ def load_data_inpa(
 
     gt_dir = os.path.expanduser(gt_path)
     mask_dir = os.path.expanduser(mask_path)
+    target_dir = os.path.expanduser(target_image_path)
 
     gt_paths = _list_image_files_recursively(gt_dir)
     mask_paths = _list_image_files_recursively(mask_dir)
+    target_paths = _list_image_files_recursively(target_dir)
 
     assert len(gt_paths) == len(mask_paths)
 
@@ -79,6 +82,7 @@ def load_data_inpa(
         image_size,
         gt_paths=gt_paths,
         mask_paths=mask_paths,
+        target_paths=target_paths,
         classes=classes,
         shard=0,
         num_shards=1,
@@ -124,6 +128,7 @@ class ImageDatasetInpa(Dataset):
         resolution,
         gt_paths,
         mask_paths,
+        target_paths,
         classes=None,
         shard=0,
         num_shards=1,
@@ -139,9 +144,11 @@ class ImageDatasetInpa(Dataset):
 
         gt_paths = sorted(gt_paths)[offset:]
         mask_paths = sorted(mask_paths)[offset:]
+        target_paths = sorted(target_paths)[offset:]
 
         self.local_gts = gt_paths[shard:][::num_shards]
         self.local_masks = mask_paths[shard:][::num_shards]
+        self.local_target_paths = target_paths[shard:][::num_shards]
 
         self.local_classes = None if classes is None else classes[shard:][::num_shards]
 
@@ -163,18 +170,24 @@ class ImageDatasetInpa(Dataset):
         mask_path = self.local_masks[idx]
         pil_mask = self.imread(mask_path)
 
+        target_path = self.local_target_paths[idx]
+        pil_target = self.imread(target_path)
+
         if self.random_crop:
             raise NotImplementedError()
         else:
             arr_gt = center_crop_arr(pil_gt, self.resolution)
             arr_mask = center_crop_arr(pil_mask, self.resolution)
+            arr_target = center_crop_arr(pil_target, self.resolution)
 
         if self.random_flip and random.random() < 0.5:
             arr_gt = arr_gt[:, ::-1]
             arr_mask = arr_mask[:, ::-1]
+            arr_target = arr_target[:, ::-1]
 
         arr_gt = arr_gt.astype(np.float32) / 127.5 - 1
         arr_mask = arr_mask.astype(np.float32) / 255.0
+        arr_target = arr_target.astype(np.float32) / 127.5 - 1 #Not sure about this modification
 
         out_dict = {}
         if self.local_classes is not None:
@@ -186,6 +199,7 @@ class ImageDatasetInpa(Dataset):
                 'GT': np.transpose(arr_gt, [2, 0, 1]),
                 'GT_name': name,
                 'gt_keep_mask': np.transpose(arr_mask, [2, 0, 1]),
+                'target_image': np.transpose(arr_target, [2, 0, 1]),
             }
         else:
             raise NotImplementedError()
