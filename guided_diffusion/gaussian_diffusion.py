@@ -53,6 +53,30 @@ def get_named_beta_schedule(schedule_name, num_diffusion_timesteps, use_scale):
         return np.linspace(
             beta_start, beta_end, num_diffusion_timesteps, dtype=np.float64
         )
+    elif schedule_name == "exponential":
+        if use_scale:
+            scale = 1000 / num_diffusion_timesteps
+        else:
+            scale = 1
+
+        beta_start = scale * 0.0001
+        beta_end = scale * 0.02
+
+        return np.logspace(beta_start, beta_end, num_diffusion_timesteps, dtype=np.float64)
+
+def get_named_lambda_schedule(schedule_name, num_diffusion_timesteps):
+    """
+    Get a pre-defined lambda schedule for the given name.
+
+    Lambdas are used for creating convex combinations of reconstructed scene and target images
+    img_comb_t = lambda_t*scene + (1-lambda_t)*target
+    """
+    if schedule_name == "linear":
+        return np.linspace(
+            1., 1./64, num_diffusion_timesteps, dtype=np.float64
+        )
+    elif schedule_name == "exponential":
+        return np.logspace(1., 1./64, num_diffusion_timesteps, dtype=np.float64)
 
 class ModelMeanType(enum.Enum):
     """
@@ -111,6 +135,8 @@ class GaussianDiffusion:
         self,
         *,
         betas,
+        nus,
+        lambdas,
         model_mean_type,
         model_var_type,
         loss_type,
@@ -124,49 +150,65 @@ class GaussianDiffusion:
 
         self.conf = conf
 
-        # Use float64 for accuracy.
-        betas = np.array(betas, dtype=np.float64)
-        self.betas = betas
-        assert len(betas.shape) == 1, "betas must be 1-D"
-        assert (betas > 0).all() and (betas <= 1).all()
+        def make_bounded_double_arr(arr, name):
+            # Use float64 for accuracy.
+            arr = np.array(arr, dtype=np.float64)
+            assert len(arr.shape) == 1, f"{name} must be 1-D"
+            assert (arr > 0).all() and (arr <= 1).all()
+            return arr
+
+        self.betas = make_bounded_double_arr(betas, 'betas')
+        self.nus = make_bounded_double_arr(nus, 'nus')
+        self.lambdas = make_bounded_double_arr(lambdas, 'lambdas')
 
         self.num_timesteps = int(betas.shape[0])
 
-        alphas = 1.0 - betas
-        self.alphas_cumprod = np.cumprod(alphas, axis=0)
-        self.alphas_cumprod_prev = np.append(1.0, self.alphas_cumprod[:-1])
-        self.alphas_cumprod_prev_prev = np.append(
-            1.0, self.alphas_cumprod_prev[:-1])
+        def calc_cum_sched_stats(arr):
+            alphas = 1.0 - arr
+            alphas_cumprod = np.cumprod(alphas, axis=0)
+            alphas_cumprod_prev = np.append(1.0, alphas_cumprod[:-1])
+            alphas_cumprod_prev_prev = np.append(1.0, alphas_cumprod_prev[:-1])
+    
+            alphas_cumprod_next = np.append(alphas_cumprod[1:], 0.0)
+    
+            sqrt_alphas_cumprod = np.sqrt(alphas_cumprod)
+            sqrt_alphas_cumprod_prev = np.sqrt(alphas_cumprod_prev)
+            sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - alphas_cumprod)
+            log_one_minus_alphas_cumprod = np.log(1.0 - alphas_cumprod)
+            sqrt_recip_alphas_cumprod = np.sqrt(1.0 / alphas_cumprod)
+            sqrt_recipm1_alphas_cumprod = np.sqrt(1.0 / alphas_cumprod - 1)
+            
+            return alphas, alphas_cumprod, alphas_cumprod_prev, alphas_cumprod_prev_prev, alphas_cumprod_next, \
+                sqrt_alphas_cumprod, sqrt_alphas_cumprod_prev, sqrt_one_minus_alphas_cumprod, log_one_minus_alphas_cumprod, sqrt_recip_alphas_cumprod, \
+                sqrt_recipm1_alphas_cumprod
+        
+        self.alphas, self.alphas_cumprod, self.alphas_cumprod_prev, self.alphas_cumprod_prev_prev, self.alphas_cumprod_next, \
+            self.sqrt_alphas_cumprod, self.sqrt_alphas_cumprod_prev, self.sqrt_one_minus_alphas_cumprod, self.log_one_minus_alphas_cumprod, \
+            self.sqrt_recip_alphas_cumprod, self.sqrt_recipm1_alphas_cumprod = calc_cum_sched_stats(betas)
+        
+        self.etas, self.etas_cumprod, self.etas_cumprod_prev, self.etas_cumprod_prev_prev, self.etas_cumprod_next, \
+            self.sqrt_etas_cumprod, self.sqrt_etas_cumprod_prev, self.sqrt_one_minus_etas_cumprod, self.log_one_minus_etas_cumprod, \
+            self.sqrt_recip_etas_cumprod, self.sqrt_recipm1_etas_cumprod = calc_cum_sched_stats(nus)
 
-        self.alphas_cumprod_next = np.append(self.alphas_cumprod[1:], 0.0)
-
-        assert self.alphas_cumprod_prev.shape == (self.num_timesteps,)
-
-        self.sqrt_alphas_cumprod = np.sqrt(self.alphas_cumprod)
-        self.sqrt_alphas_cumprod_prev = np.sqrt(self.alphas_cumprod_prev)
-        self.sqrt_one_minus_alphas_cumprod = np.sqrt(1.0 - self.alphas_cumprod)
-        self.log_one_minus_alphas_cumprod = np.log(1.0 - self.alphas_cumprod)
-        self.sqrt_recip_alphas_cumprod = np.sqrt(1.0 / self.alphas_cumprod)
-        self.sqrt_recipm1_alphas_cumprod = np.sqrt(
-            1.0 / self.alphas_cumprod - 1)
-
+        # full img stats
+        # TODO how do nu's, eta's effect this?
         self.posterior_variance = (
-            betas * (1.0 - self.alphas_cumprod_prev) /
-            (1.0 - self.alphas_cumprod)
+                betas * (1.0 - self.alphas_cumprod_prev) /
+                (1.0 - self.alphas_cumprod)
         )
         self.posterior_log_variance_clipped = np.log(
             np.append(self.posterior_variance[1], self.posterior_variance[1:])
         )
         self.posterior_mean_coef1 = (
-            betas * np.sqrt(self.alphas_cumprod_prev) /
-            (1.0 - self.alphas_cumprod)
+                betas * np.sqrt(self.alphas_cumprod_prev) /
+                (1.0 - self.alphas_cumprod)
         )
         self.posterior_mean_coef2 = (
-            (1.0 - self.alphas_cumprod_prev)
-            * np.sqrt(alphas)
-            / (1.0 - self.alphas_cumprod)
+                (1.0 - self.alphas_cumprod_prev)
+                * np.sqrt(self.alphas)
+                / (1.0 - self.alphas_cumprod)
         )
-
+        
     def undo(self, image_before_step, img_after_model, est_x_0, t, debug=False):
         return self._undo(img_after_model, t)
 

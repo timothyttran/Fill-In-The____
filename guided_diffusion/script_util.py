@@ -261,6 +261,8 @@ def create_gaussian_diffusion(
     learn_sigma=False,
     sigma_small=False,
     noise_schedule="linear",
+    tgt_noise_schedule="linear",
+    lambda_schedule="linear",
     use_kl=False,
     predict_xstart=False,
     rescale_timesteps=False,
@@ -270,10 +272,16 @@ def create_gaussian_diffusion(
 ):
 
     betas = gd.get_named_beta_schedule(noise_schedule, steps, use_scale=True)
+    nus = gd.get_named_beta_schedule(tgt_noise_schedule, steps, use_scale=True)
+    lambdas = gd.get_named_lambda_schedule(lambda_schedule, steps)
 
     if conf.use_value_logger:
         conf.value_logger.add_value(
             betas, 'betas create_gaussian_diffusion')
+        conf.value_logger.add_value(
+            nus, 'nus create_gaussian_diffusion')
+        conf.value_logger.add_value(
+            lambdas, 'lambdas create_gaussian_diffusion')
 
     if use_kl:
         loss_type = gd.LossType.RESCALED_KL
@@ -288,6 +296,8 @@ def create_gaussian_diffusion(
     return SpacedDiffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),
         betas=betas,
+        nus=nus,
+        lambdas=lambdas,
         model_mean_type=(
             gd.ModelMeanType.EPSILON if not predict_xstart else gd.ModelMeanType.START_X
         ),
