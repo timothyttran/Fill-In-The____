@@ -433,7 +433,7 @@ class GaussianDiffusion:
                     # This is our t'th noised target image
                     weighed_target = target_part + noise_part
 
-                lambda_ = .1                 
+                lambda_ = self.lambdas[t]
 
                 # updates x to be x_{t-1} - eq. 8c
                 x = (
@@ -443,7 +443,7 @@ class GaussianDiffusion:
                     +
                     (1 - gt_keep_mask) * (
                         # TODO: where the lambda convex combo goes for our implementation
-                        lambda_ * weighed_target + (1 - lambda_) * x
+                        lambda_ * x + (1 - lambda_) * weighed_target
                     )
                 )
 
