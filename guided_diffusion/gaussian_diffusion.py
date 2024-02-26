@@ -360,7 +360,6 @@ class GaussianDiffusion:
 
                 target = model_kwargs['target_image']
                 assert target is not None, 'WARNING: target is None'
-                # TODO: use target to find 8a, 8b, 8c equations then do linear combo
 
                 # Setting up params for eq. 8a in the paper
                 # Note: need the cumulitive prod in order to auto generate the t'th noised ground truth
@@ -368,9 +367,9 @@ class GaussianDiffusion:
                 alpha_cumprod = _extract_into_tensor(
                     self.alphas_cumprod, t, x.shape)
                 
-                # TODO: repeat this process for the t'th noised target image.
                 if conf.inpa_inj_sched_prev_cumnoise:
                     weighed_gt = self.get_gt_noised(gt, int(t[0].item()))
+                    print("HERE")
                 else:
                     gt_weight = th.sqrt(alpha_cumprod)
                     gt_part = gt_weight * gt
@@ -380,7 +379,20 @@ class GaussianDiffusion:
 
                     # weighed_gt is output of eq. 8a
                     weighed_gt = gt_part + noise_part
-                                    
+
+
+                    # Repeat this process for the t'th noised target image.
+                    target_weight = th.sqrt(alpha_cumprod)
+                    target_part = target_weight * target
+
+                    noise_weight = th.sqrt((1 - alpha_cumprod))
+                    noise_part = noise_weight * th.randn_like(x)
+
+                    # This is our t'th noised target image
+                    weighed_target = target_part + noise_part
+
+                lambda_ = .1                 
+
                 # updates x to be x_{t-1} - eq. 8c
                 x = (
                     gt_keep_mask * (
@@ -389,7 +401,7 @@ class GaussianDiffusion:
                     +
                     (1 - gt_keep_mask) * (
                         # TODO: where the lambda convex combo goes for our implementation
-                        x
+                        lambda_ * weighed_target + (1 - lambda_) * x
                     )
                 )
 
