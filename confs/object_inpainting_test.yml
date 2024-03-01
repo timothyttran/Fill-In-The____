@@ -58,8 +58,9 @@ inpa_inj_sched_prev: true
 n_jobs: 1
 print_estimated_vars: true
 inpa_inj_sched_prev_cumnoise: false
+mask_buffer_size: 5
 schedule_jump_params:
-  t_T: 10
+  t_T: 2
   n_sample: 1
   jump_length: 1
   jump_n_sample: 1
