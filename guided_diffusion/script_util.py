@@ -270,10 +270,12 @@ def create_gaussian_diffusion(
     timestep_respacing="",
     conf=None
 ):
-
     betas = gd.get_named_beta_schedule(noise_schedule, steps, use_scale=True)
     nus = gd.get_named_beta_schedule(tgt_noise_schedule, steps, use_scale=True)
-    lambdas = gd.get_named_lambda_schedule(lambda_schedule, steps)
+    lambdas = gd.get_named_lambda_schedule(lambda_schedule, conf['schedule_jump_params']['t_T'],
+                                           conf.get('start_inpaint_percent', 1.0))
+    # print('schedule', lambda_schedule, 't_T', conf['schedule_jump_params']['t_T'], 'inpaint %', conf.get('start_inpaint_percent', start_inpaint_percent))
+    # print('lambdas\n', lambdas, lambdas.shape)
 
     if conf.use_value_logger:
         conf.value_logger.add_value(
