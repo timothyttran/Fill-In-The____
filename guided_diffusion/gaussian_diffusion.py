@@ -461,7 +461,7 @@ class GaussianDiffusion:
 
                 # x = (
                 #     (extended_mask) * (
-                #         weighed_gt
+                #         weighted_gt
                 #     )
                 #     +
                 #     (gt_keep_mask - extended_mask) * ( # this makes 1's at the buffer/ring

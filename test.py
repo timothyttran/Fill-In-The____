@@ -57,7 +57,7 @@ def toU8(sample):
     sample = sample.detach().cpu().numpy()
     return sample
 
-def extend_mask(binary_mask_, buffer_size):
+def extend_mask(binary_mask_, buffer_size, device):
     """
     Extend a binary mask by setting white pixels that are within a Manhattan distance of 'buffer_size' from a black pixel to black.
 
@@ -96,7 +96,7 @@ def extend_mask(binary_mask_, buffer_size):
     # Repeat the extended mask along the channel axis to make it compatible with RGB format
     extended_masks_rgb = np.repeat(extended_masks_array[:, np.newaxis, :, :], 3, axis=1)
     
-    return th.tensor(extended_masks_rgb, requires_grad=False)
+    return th.tensor(extended_masks_rgb, requires_grad=False).to(device)
 
 def main(conf: conf_mgt.Default_Conf):
 
@@ -172,7 +172,7 @@ def main(conf: conf_mgt.Default_Conf):
             model_kwargs['gt_keep_mask'] = gt_keep_mask
 
         model_kwargs['target_image'] = batch['target_image']
-        model_kwargs['gt_keep_mask_buffer'] = extend_mask(batch['gt_keep_mask'], conf.mask_buffer_size)
+        model_kwargs['gt_keep_mask_buffer'] = extend_mask(batch['gt_keep_mask'], conf.mask_buffer_size, device)
             
         batch_size = model_kwargs["gt"].shape[0]
 
