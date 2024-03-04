@@ -64,8 +64,8 @@ inpa_inj_sched_prev_cumnoise: false
 schedule_jump_params:
   t_T: 100
   n_sample: 1
-  jump_length: 10
-  jump_n_sample: 10
+  jump_length: 40
+  jump_n_sample: 40
 data:
   eval:
     lama_inet256_ex64_n100_test:
@@ -85,7 +85,7 @@ data:
       offset: 0
       max_len: 1
       paths:
-        srs: ./log/doggy/inpainted
-        lrs: ./log/doggy/gt_masked
-        gts: ./log/doggy/gt
-        gt_keep_masks: ./log/doggy/gt_keep_mask
+        srs: ./log/doggy_50/inpainted
+        lrs: ./log/doggy_50/gt_masked
+        gts: ./log/doggy_50/gt
+        gt_keep_masks: ./log/doggy_50/gt_keep_mask
