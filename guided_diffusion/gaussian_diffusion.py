@@ -74,13 +74,13 @@ def get_named_lambda_schedule(schedule_name, num_diffusion_timesteps, start_inpa
     img_comb_t = lambda_t*scene + (1-lambda_t)*target
     """
     if schedule_name == "linear":
-        return np.minimum(
+        return np.maximum(
             np.linspace(
-                1 / (1 - start_inpaint_percent),
-                0.,
+                (0 - start_inpaint_percent) / (1 - start_inpaint_percent),
+                1.,
                 num_diffusion_timesteps, endpoint=True, dtype=np.float64
             ),
-            1.0
+            0.0
         )
     elif schedule_name == "exponential":
         return np.logspace(1., 1./64, num_diffusion_timesteps, dtype=np.float64)
@@ -442,9 +442,9 @@ class GaussianDiffusion:
 
                     # This is our t'th noised target image
                     weighted_target = target_part + noise_part
-
+                
+                # lambda is the weight towards the OG target image
                 lambda_ = self.lambdas[t]
-                # print("lambda_", lambda_)
 
                 # OLD PIPELINE WITHOUT MASK BUFFER MODFICATION
                 # updates x to be x_{t-1} - eq. 8c
