@@ -98,6 +98,34 @@ def extend_mask(binary_mask_, buffer_size, device):
     
     return th.tensor(extended_masks_rgb, requires_grad=False).to(device)
 
+
+def heated_mask(binary_mask_, device):
+    """
+    Create heated masks that is 1 at the center and a decimal value the farther away
+
+    Parameters:
+        - binary_mask_ (torch.Tensor): A binary mask tensor of shape (N, 3, H, W), where H is the height and W is the width of the image.
+    """
+    binary_mask = binary_mask_.cpu().numpy()
+
+    # Initialize the extended mask array
+    heated_masks = []
+
+    # Loop through each image in the binary_mask array
+    for image_index in range(binary_mask.shape[0]):
+        # Compute the distance transform of the black pixels in the current image
+        dist_transform = distance_transform_cdt(1 - binary_mask[image_index, 0, :, :])  # Ignore channels
+        
+        heated_masks.append(dist_transform / np.max(dist_transform))
+
+    # Convert the list of heated masks into a numpy array along the first axis
+    heated_masks_array = np.array(heated_masks)
+
+    # Repeat the heated mask along the channel axis to make it compatible with RGB format
+    heated_masks_rgb = np.repeat(heated_masks_array[:, np.newaxis, :, :], 3, axis=1)
+    
+    return th.tensor(heated_masks_rgb, requires_grad=False).to(device)
+
 def main(conf: conf_mgt.Default_Conf):
 
     print("Start", conf['name'])
@@ -173,6 +201,7 @@ def main(conf: conf_mgt.Default_Conf):
 
         model_kwargs['target_image'] = batch['target_image']
         model_kwargs['gt_keep_mask_buffer'] = extend_mask(batch['gt_keep_mask'], conf.mask_buffer_size, device)
+        model_kwargs['gt_keep_mask_heated'] = heated_mask(batch['gt_keep_mask'], device)
             
         batch_size = model_kwargs["gt"].shape[0]
 

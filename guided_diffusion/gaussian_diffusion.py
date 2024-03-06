@@ -407,6 +407,7 @@ class GaussianDiffusion:
 
                 # Same as gt_keep_mask but it masks out less of the scene (more 0's around original gt_keep_mask)
                 extended_mask = model_kwargs.get('gt_keep_mask_buffer')
+                heated_mask = model_kwargs['gt_keep_mask_heated']
 
                 gt = model_kwargs['gt']
 
@@ -448,24 +449,9 @@ class GaussianDiffusion:
 
                 # OLD PIPELINE WITHOUT MASK BUFFER MODFICATION
                 # updates x to be x_{t-1} - eq. 8c
-                x = (
-                    gt_keep_mask * (
-                        weighted_gt
-                    )
-                    +
-                    (1 - gt_keep_mask) * (
-                        # TODO: where the lambda convex combo goes for our implementation
-                        lambda_ * x + (1 - lambda_) * weighted_target
-                    )
-                )
-
                 # x = (
-                #     (extended_mask) * (
+                #     gt_keep_mask * (
                 #         weighted_gt
-                #     )
-                #     +
-                #     (gt_keep_mask - extended_mask) * ( # this makes 1's at the buffer/ring
-                #         x
                 #     )
                 #     +
                 #     (1 - gt_keep_mask) * (
@@ -473,6 +459,36 @@ class GaussianDiffusion:
                 #         lambda_ * x + (1 - lambda_) * weighted_target
                 #     )
                 # )
+
+                # Extended mask V2
+                # x = (
+                #     (extended_mask) * (
+                #         weighted_gt
+                #     )
+                #     +
+                #     (gt_keep_mask - extended_mask) * ( # this makes 1's at the buffer/ring
+                #         lambda_ * x + (1 - lambda_) * weighted_target
+                #     )
+                #     +
+                #     (1 - gt_keep_mask) * (
+                #         # TODO: where the lambda convex combo goes for our implementation
+                #         (0.98*lambda_) * x + (1 - (0.98*lambda_)) * weighted_target
+                #     )
+                # )
+
+                # Heated masks
+                # Keeps more of the forward pass target the closer it is to the center
+                x = (
+                    gt_keep_mask * (
+                        weighted_gt
+                    )
+                    +
+                    (1 - gt_keep_mask) * (
+                        # TODO: where the lambda convex combo goes for our implementation
+                        lambda_ * x + heated_mask * (1 - lambda_) * weighted_target
+                    )
+                ).float()
+
 
         # eq. 2 (p) - the denoising step
         out = self.p_mean_variance(
