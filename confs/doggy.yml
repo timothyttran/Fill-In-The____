@@ -22,7 +22,6 @@ noise_schedule: linear
 tgt_noise_schedule: linear
 lambda_schedule: linear
 start_inpaint_percent: 0.5
-mask_buffer_size: 4
 num_channels: 256
 num_head_channels: 64
 num_heads: 4
@@ -70,9 +69,9 @@ data:
   eval:
     lama_inet256_ex64_n100_test:
       mask_loader: true
-      gt_path: ./data/datasets/gts/dog
-      mask_path: ./data/datasets/gt_keep_masks/dog_exact_mask
-      target_image_path: ./data/datasets/target_image/dog
+      gt_path: ./data/datasets/gts/doggy
+      mask_path: ./data/datasets/gt_keep_masks/doggy
+      target_image_path: ./data/datasets/target_image/doggy
       image_size: 256
       class_cond: false
       deterministic: true

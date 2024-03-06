@@ -71,19 +71,21 @@ def get_named_lambda_schedule(schedule_name, num_diffusion_timesteps, start_inpa
     Get a pre-defined lambda schedule for the given name.
 
     Lambdas are used for creating convex combinations of reconstructed scene and target images
-    img_comb_t = lambda_t*generation_{t+1} + (1-lambda_t)*target
+    img_comb_t = lambda_t*recreated_image_{t+1} + (1-lambda_t)*target
     """
     if schedule_name == "linear":
         return np.minimum(
             np.linspace(
-                1/(1-start_inpaint_percent),
-                0,
+                1 / (1 - start_inpaint_percent),
+                0.,
                 num_diffusion_timesteps, endpoint=True, dtype=np.float64
             ),
             1.0
         )
     elif schedule_name == "exponential":
-        return np.logspace(1., 1./64, num_diffusion_timesteps, dtype=np.float64)
+        raise NotImplementedError('NO EXPONENTIAL LAMBDA SCHEDULE YET')
+        return np.logspace(1., 1./64, num_diffusion_timesteps, endpoint=True, dtype=np.float64)
+
 
 class ModelMeanType(enum.Enum):
     """
@@ -139,16 +141,16 @@ class GaussianDiffusion:
     """
 
     def __init__(
-        self,
-        *,
-        betas,
-        nus,
-        lambdas,
-        model_mean_type,
-        model_var_type,
-        loss_type,
-        rescale_timesteps=False,
-        conf=None
+            self,
+            *,
+            betas,
+            nus,
+            lambdas,
+            model_mean_type,
+            model_var_type,
+            loss_type,
+            rescale_timesteps=False,
+            conf=None
     ):
         self.model_mean_type = model_mean_type
         self.model_var_type = model_var_type
@@ -356,7 +358,6 @@ class GaussianDiffusion:
 
         gradient = cond_fn(x, self._scale_timesteps(t), **model_kwargs)
 
-
         new_mean = (
                 p_mean_var["mean"].float() + p_mean_var["variance"] *
                 gradient.float()
@@ -405,10 +406,6 @@ class GaussianDiffusion:
                 if gt_keep_mask is None:
                     gt_keep_mask = conf.get_inpa_mask(x)
 
-                # Same as gt_keep_mask but it masks out less of the scene (more 0's around original gt_keep_mask)
-                extended_mask = model_kwargs.get('gt_keep_mask_buffer')
-                heated_mask = model_kwargs['gt_keep_mask_heated']
-
                 gt = model_kwargs['gt']
 
                 target = model_kwargs['target_image']
@@ -419,9 +416,9 @@ class GaussianDiffusion:
                 # Note: this computes the t'th noised ground truth on-demand.
                 alpha_cumprod = _extract_into_tensor(
                     self.alphas_cumprod, t, x.shape)
-                
+
                 if conf.inpa_inj_sched_prev_cumnoise:
-                    weighted_gt = self.get_gt_noised(gt, int(t[0].item()))
+                    weighed_gt = self.get_gt_noised(gt, int(t[0].item()))
                     print("HERE")
                 else:
                     gt_weight = th.sqrt(alpha_cumprod)
@@ -431,8 +428,7 @@ class GaussianDiffusion:
                     noise_part = noise_weight * th.randn_like(x)
 
                     # weighed_gt is output of eq. 8a
-                    weighted_gt = gt_part + noise_part
-
+                    weighed_gt = gt_part + noise_part
 
                     # Repeat this process for the t'th noised target image.
                     target_weight = th.sqrt(alpha_cumprod)
@@ -443,52 +439,21 @@ class GaussianDiffusion:
 
                     # This is our t'th noised target image
                     weighted_target = target_part + noise_part
-                
-                # lambda is the weight towards the previous noised image
+
                 lambda_ = self.lambdas[t]
+                # print("lambda_", lambda_)
 
-                # OLD PIPELINE WITHOUT MASK BUFFER MODFICATION
                 # updates x to be x_{t-1} - eq. 8c
-                # x = (
-                #     gt_keep_mask * (
-                #         weighted_gt
-                #     )
-                #     +
-                #     (1 - gt_keep_mask) * (
-                #         # TODO: where the lambda convex combo goes for our implementation
-                #         lambda_ * x + (1 - lambda_) * weighted_target
-                #     )
-                # )
-
-                # Extended mask V2
-                # x = (
-                #     (extended_mask) * (
-                #         weighted_gt
-                #     )
-                #     +
-                #     (gt_keep_mask - extended_mask) * ( # this makes 1's at the buffer/ring
-                #         lambda_ * x + (1 - lambda_) * weighted_target
-                #     )
-                #     +
-                #     (1 - gt_keep_mask) * (
-                #         # TODO: where the lambda convex combo goes for our implementation
-                #         (0.98*lambda_) * x + (1 - (0.98*lambda_)) * weighted_target
-                #     )
-                # )
-
-                # Heated masks
-                # Keeps more of the forward pass target the closer it is to the center
                 x = (
-                    gt_keep_mask * (
-                        weighted_gt
-                    )
-                    +
-                    (1 - gt_keep_mask) * (
-                        # TODO: where the lambda convex combo goes for our implementation
-                        lambda_ * x + heated_mask * (1 - lambda_) * weighted_target
-                    )
-                ).float()
-
+                        gt_keep_mask * (
+                    weighed_gt
+                )
+                        +
+                        (1 - gt_keep_mask) * (
+                            # TODO: where the lambda convex combo goes for our implementation
+                                lambda_ * x + (1 - lambda_) * weighted_target
+                        )
+                )
 
         # eq. 2 (p) - the denoising step
         out = self.p_mean_variance(
@@ -604,7 +569,6 @@ class GaussianDiffusion:
 
         self.gt_noises = None  # reset for next image
 
-
         pred_xstart = None
 
         idx_wall = -1
@@ -650,7 +614,7 @@ class GaussianDiffusion:
                     image_before_step = image_after_step.clone()
                     image_after_step = self.undo(
                         image_before_step, image_after_step,
-                        est_x_0=out['pred_xstart'], t=t_last_t+t_shift, debug=False)
+                        est_x_0=out['pred_xstart'], t=t_last_t + t_shift, debug=False)
                     pred_xstart = out["pred_xstart"]
 
 
