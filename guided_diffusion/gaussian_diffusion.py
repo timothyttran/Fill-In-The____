@@ -406,6 +406,10 @@ class GaussianDiffusion:
                 if gt_keep_mask is None:
                     gt_keep_mask = conf.get_inpa_mask(x)
 
+                # Same as gt_keep_mask but it masks out less of the scene (more 0's around original gt_keep_mask)
+                extended_mask = model_kwargs.get('gt_keep_mask_buffer')
+                heated_mask = model_kwargs['gt_keep_mask_heated']
+
                 gt = model_kwargs['gt']
 
                 target = model_kwargs['target_image']
@@ -445,15 +449,29 @@ class GaussianDiffusion:
 
                 # updates x to be x_{t-1} - eq. 8c
                 x = (
-                        gt_keep_mask * (
-                    weighed_gt
+                    gt_keep_mask * (
+                        weighed_gt
+                    )
+                    +
+                    (1 - gt_keep_mask) * (
+                        # TODO: where the lambda convex combo goes for our implementation
+                        lambda_ * x + (1 - lambda_) * weighted_target
+                    )
                 )
-                        +
-                        (1 - gt_keep_mask) * (
-                            # TODO: where the lambda convex combo goes for our implementation
-                                lambda_ * x + (1 - lambda_) * weighted_target
-                        )
-                )
+                
+                # Heated masks
+                # Keeps more of the forward pass target the closer it is to the center
+                # x = (
+                #     gt_keep_mask * (
+                #         weighed_gt
+                #     )
+                #     +
+                #     (1 - gt_keep_mask) * (
+                #         # TODO: where the lambda convex combo goes for our implementation
+                #         lambda_ * x * (1.0 - heated_mask) + (1 - lambda_) * heated_mask * weighted_target
+                #     )
+                # ).float()
+
 
         # eq. 2 (p) - the denoising step
         out = self.p_mean_variance(
