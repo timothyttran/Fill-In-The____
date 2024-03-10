@@ -78,7 +78,7 @@ def get_named_lambda_schedule(schedule_name, num_diffusion_timesteps, start_inpa
             np.linspace(
                 1 / (1 - start_inpaint_percent),
                 0.,
-                num_diffusion_timesteps, endpoint=True, dtype=np.float64
+                num_diffusion_timesteps, endpoint=False, dtype=np.float64
             ),
             1.0
         )
@@ -448,19 +448,6 @@ class GaussianDiffusion:
                 # print("lambda_", lambda_)
 
                 # updates x to be x_{t-1} - eq. 8c
-                x = (
-                    gt_keep_mask * (
-                        weighed_gt
-                    )
-                    +
-                    (1 - gt_keep_mask) * (
-                        # TODO: where the lambda convex combo goes for our implementation
-                        lambda_ * x + (1 - lambda_) * weighted_target
-                    )
-                )
-                
-                # Heated masks
-                # Keeps more of the forward pass target the closer it is to the center
                 # x = (
                 #     gt_keep_mask * (
                 #         weighed_gt
@@ -468,9 +455,23 @@ class GaussianDiffusion:
                 #     +
                 #     (1 - gt_keep_mask) * (
                 #         # TODO: where the lambda convex combo goes for our implementation
-                #         lambda_ * x * (1.0 - heated_mask) + (1 - lambda_) * heated_mask * weighted_target
+                #         lambda_ * x + (1 - lambda_) * weighted_target
                 #     )
-                # ).float()
+                # )
+                
+                # Heated masks
+                # Keeps more of the forward pass target the closer it is to the center
+                x = (1 - heated_mask) * x + heated_mask * weighted_target
+                x = (
+                    gt_keep_mask * (
+                        weighed_gt
+                    )
+                    +
+                    (1 - gt_keep_mask) * (
+                        # TODO: where the lambda convex combo goes for our implementation
+                        lambda_ * x * (1.0 - heated_mask) + (1 - lambda_) * heated_mask * weighted_target
+                    )
+                ).float()
 
 
         # eq. 2 (p) - the denoising step
